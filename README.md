@@ -81,74 +81,73 @@ Master-2 реплицируется в Master-1
 
 ## Решение 2
 
-
 Master: VM1 rmq01, IP 192.168.56.104, контейнер mysql8 (MySQL 8.0)  
 Slave: VM2 rmq02, IP 192.168.56.105, контейнер mysql8_slave (MySQL 8.0)  
-Сеть между ВМ: host-only 192.168.56.0/24 (машины пингуются)  
+Сеть между ВМ: host-only 192.168.56.0/24 (машины пингуются)   
 
-Обе ВМ:
-Ubuntu Jammy
-MySQL 8.0 в Docker
-соединены по сети 192.168.56.0/24
+Обе ВМ:  
+Ubuntu Jammy  
+MySQL 8.0 в Docker  
+соединены по сети 192.168.56.0/24  
 
-На master:
+На master:  
 
-docker exec -it mysql8 sh -lc 'cat > /etc/mysql/conf.d/replication.cnf <<EOF
-[mysqld]
-server-id=1
-log-bin=mysql-bin
-binlog-format=ROW
-EOF'
-docker restart mysql8
+docker exec -it mysql8 sh -lc 'cat > /etc/mysql/conf.d/replication.cnf <<EOF  
+[mysqld]  
+server-id=1  
+log-bin=mysql-bin  
+binlog-format=ROW  
+EOF'  
+docker restart mysql8  
+ 
+docker exec -it mysql8 mysql -uroot -pRootPass123 -e "  
+SHOW VARIABLES LIKE 'server_id';  
+SHOW VARIABLES LIKE 'log_bin';  
+SHOW VARIABLES LIKE 'binlog_format';  
 
-docker exec -it mysql8 mysql -uroot -pRootPass123 -e "
-SHOW VARIABLES LIKE 'server_id';
-SHOW VARIABLES LIKE 'log_bin';
-SHOW VARIABLES LIKE 'binlog_format';
+docker exec -it mysql8 mysql -uroot -pRootPass123 -e "  
+CREATE USER IF NOT EXISTS 'repl'@'%' IDENTIFIED BY 'ReplPass123';  
+GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';  
+FLUSH PRIVILEGES;  
+"  
 
-docker exec -it mysql8 mysql -uroot -pRootPass123 -e "
-CREATE USER IF NOT EXISTS 'repl'@'%' IDENTIFIED BY 'ReplPass123';
-GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';
-FLUSH PRIVILEGES;
-"
-
-docker exec -it mysql8 mysql -uroot -pRootPass123 -e "SHOW MASTER STATUS\G"
+docker exec -it mysql8 mysql -uroot -pRootPass123 -e "SHOW MASTER STATUS\G"  
 
 ![Задание 2](https://github.com/SKISHCHENKO/12-06-HW/blob/main/img/task2_1.png)
 
-На slave
+На slave  
 
-docker run -d \
-  --name mysql8_slave \
-  -e MYSQL_ROOT_PASSWORD=RootPass123 \
-  -p 3306:3306 \
-  -v mysql8_slave_data:/var/lib/mysql \
-  mysql:8.0
+docker run -d \  
+  --name mysql8_slave \  
+  -e MYSQL_ROOT_PASSWORD=RootPass123 \  
+  -p 3306:3306 \  
+  -v mysql8_slave_data:/var/lib/mysql \  
+  mysql:8.0  
 
-docker exec -it mysql8_slave sh -lc 'cat > /etc/mysql/conf.d/replication.cnf <<EOF
-[mysqld]
-server-id=2
-read-only=1
-EOF'
-docker restart mysql8_slave
+docker exec -it mysql8_slave sh -lc 'cat > /etc/mysql/conf.d/replication.cnf <<EOF  
+[mysqld]  
+server-id=2  
+read-only=1  
+EOF'  
+docker restart mysql8_slave  
 
-docker exec -it mysql8_slave mysql -uroot -pRootPass123 -e "
-SHOW VARIABLES LIKE 'server_id';
-SHOW VARIABLES LIKE 'read_only';
-"
-docker exec -it mysql8_slave mysql -uroot -pRootPass123 -e "
-CHANGE REPLICATION SOURCE TO
-SOURCE_HOST='192.168.56.104',
-SOURCE_USER='repl',
-SOURCE_PASSWORD='ReplPass123',
-SOURCE_LOG_FILE='mysql-bin.000001',
-SOURCE_LOG_POS=871;
-START REPLICA;
-"
+docker exec -it mysql8_slave mysql -uroot -pRootPass123 -e "  
+SHOW VARIABLES LIKE 'server_id';  
+SHOW VARIABLES LIKE 'read_only';  
+"  
+docker exec -it mysql8_slave mysql -uroot -pRootPass123 -e "  
+CHANGE REPLICATION SOURCE TO  
+SOURCE_HOST='192.168.56.104',  
+SOURCE_USER='repl',  
+SOURCE_PASSWORD='ReplPass123',  
+SOURCE_LOG_FILE='mysql-bin.000001',  
+SOURCE_LOG_POS=871;  
+START REPLICA;  
+"  
 
-sergk@rmq02:~$ docker exec -it mysql8_slave mysql -uroot -pRootPass123 -e "
-SHOW VARIABLES LIKE 'server_id';
-SHOW VARIABLES LIKE 'read_only';
+sergk@rmq02:~$ docker exec -it mysql8_slave mysql -uroot -pRootPass123 -e "  
+SHOW VARIABLES LIKE 'server_id';  
+SHOW VARIABLES LIKE 'read_only';  
 "
 ![Задание 2](https://github.com/SKISHCHENKO/12-06-HW/blob/main/img/task2_2.png)
 
@@ -156,26 +155,26 @@ docker exec -it mysql8_slave mysql -uroot -pRootPass123 -e "SHOW REPLICA STATUS\
 
 ![Задание 2](https://github.com/SKISHCHENKO/12-06-HW/blob/main/img/task2_3.png)
 
-На master создали БД/таблицу и вставили строку
-docker exec -it mysql8 mysql -uroot -pRootPass123 -e "
-CREATE DATABASE IF NOT EXISTS test_db;
-USE test_db;
-CREATE TABLE IF NOT EXISTS test_table (id INT PRIMARY KEY, name VARCHAR(50));
-INSERT INTO test_table VALUES (1,'Master Record')
-ON DUPLICATE KEY UPDATE name=VALUES(name);
-SELECT * FROM test_table;
+На master создали БД/таблицу и вставили строку  
+docker exec -it mysql8 mysql -uroot -pRootPass123 -e "  
+CREATE DATABASE IF NOT EXISTS test_db;  
+USE test_db;  
+CREATE TABLE IF NOT EXISTS test_table (id INT PRIMARY KEY, name VARCHAR(50));  
+INSERT INTO test_table VALUES (1,'Master Record')  
+ON DUPLICATE KEY UPDATE name=VALUES(name);  
+SELECT * FROM test_table;  
 "
 
 ![Задание 2](https://github.com/SKISHCHENKO/12-06-HW/blob/main/img/task2_4.png)
 
-На slave убедились, что данные появились
-docker exec -it mysql8_slave mysql -uroot -pRootPass123 -e "
-SELECT * FROM test_db.test_table;
+На slave убедились, что данные появились  
+docker exec -it mysql8_slave mysql -uroot -pRootPass123 -e "  
+SELECT * FROM test_db.test_table;  
 "
 
 ![Задание 2](https://github.com/SKISHCHENKO/12-06-HW/blob/main/img/task2_5.png)
 
-## Задание 3. 
+## Задание 3.  
 
 Выполните конфигурацию master-master репликации. Произведите проверку.  
 
